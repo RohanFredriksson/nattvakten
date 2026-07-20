@@ -6,7 +6,7 @@ services:
       - ${NATTVAKTEN_ENV_FILE:-/etc/nattvakten/nattvakten.env}
     user: "${NATTVAKTEN_UID}:${NATTVAKTEN_GID}"
     ports:
-      - "8000:8000"
+      - "${NATTVAKTEN_PORT:-8765}:8765"
     volumes:
       - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
     read_only: true

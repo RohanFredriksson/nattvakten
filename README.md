@@ -17,23 +17,36 @@ Lease TTLs are bounded by configuration. Leases live only in memory, so a full p
 
 ## Local development
 
-Use Python 3.12 or later. Create an environment, install the project, configure a local token, and start the API:
+Docker is the default local workflow. Configure a local token, then start the API with live reload:
+
+```bash
+cp .env.example .env
+docker compose -f compose.dev.yaml up --build
+```
+
+Nattvakten listens on port `8765` by default. When it is already in use, choose another local port:
+
+```bash
+NATTVAKTEN_DEV_PORT=18765 docker compose -f compose.dev.yaml up --build
+```
+
+Run focused tests in the same development container with:
+
+```bash
+docker compose -f compose.dev.yaml run --rm nattvakten python -m pytest -q
+```
+
+The development container mounts the source code read-only and does not receive the host D-Bus socket, so it cannot power off the host. `NATTVAKTEN_POWEROFF_ENABLED` should remain `false` in `.env`.
+
+Direct Python remains useful for editor debugging or a quick test run:
 
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -e '.[dev]'
-cp .env.example .env
 set -a; . ./.env; set +a
 .venv/bin/uvicorn nattvakten.app:app --app-dir src --reload
-```
-
-Run focused tests with:
-
-```bash
 PYTHONPATH=src .venv/bin/python -m pytest -q
 ```
-
-`NATTVAKTEN_POWEROFF_ENABLED` defaults to `false`. Leave it disabled during development and testing.
 
 ## Docker deployment
 
@@ -58,10 +71,10 @@ sudo systemctl enable --now docker.service
 
 ### 2. Copy the application
 
-Replace `<your-github-user>` with the GitHub account or organization that hosts this repository, then clone it on the server. No host Python environment or package installation is needed.
+Clone the repository on the server. No host Python environment or package installation is needed.
 
 ```bash
-sudo git clone https://github.com/<your-github-user>/nattvakten.git /opt/nattvakten
+sudo git clone https://github.com/RohanFredriksson/nattvakten.git /opt/nattvakten
 ```
 
 ### 3. Create the service account and configuration
@@ -82,6 +95,7 @@ NATTVAKTEN_MIN_LEASE_TTL_SECONDS=30
 NATTVAKTEN_MAX_LEASE_TTL_SECONDS=900
 NATTVAKTEN_SHUTDOWN_GRACE_SECONDS=60
 NATTVAKTEN_POWEROFF_ENABLED=false
+NATTVAKTEN_PORT=8765
 NATTVAKTEN_UID=$NATTVAKTEN_UID
 NATTVAKTEN_GID=$NATTVAKTEN_GID
 EOF
@@ -110,11 +124,11 @@ Do not replace the polkit rule with a broad passwordless `sudo` rule or mount th
 Run on the server:
 
 ```bash
-curl http://127.0.0.1:8000/healthz
-curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/v1/status
+curl http://127.0.0.1:8765/healthz
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8765/v1/status
 curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"client_name":"manual-check","ttl_seconds":60}' \
-  http://127.0.0.1:8000/v1/leases
+  http://127.0.0.1:8765/v1/leases
 sudo journalctl -u nattvakten.service --since "5 minutes ago"
 sudo docker compose --env-file /etc/nattvakten/nattvakten.env -f /opt/nattvakten/compose.yaml logs --tail=100
 ```

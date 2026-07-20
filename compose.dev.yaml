@@ -1,0 +1,24 @@
+services:
+  nattvakten:
+    build:
+      context: .
+      target: development
+    container_name: nattvakten-dev
+    env_file:
+      - ${NATTVAKTEN_DEV_ENV_FILE:-.env}
+    ports:
+      - "${NATTVAKTEN_DEV_PORT:-8765}:8765"
+    volumes:
+      - .:/workspace:ro,Z
+    working_dir: /workspace
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+    command: uvicorn nattvakten.app:app --app-dir src --host 0.0.0.0 --port 8765 --reload --reload-dir src
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /workspace/.pytest_cache
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
