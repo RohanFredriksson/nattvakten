@@ -1,25 +1,16 @@
-import subprocess
+from pathlib import Path
 
 
 class PowerController:
-    def __init__(self, enabled: bool) -> None:
+    def __init__(
+        self,
+        enabled: bool,
+        request_path: str = "/run/nattvakten/poweroff.request",
+    ) -> None:
         self._enabled = enabled
+        self._request_path = Path(request_path)
 
     def power_off(self) -> None:
         if not self._enabled:
             return
-        subprocess.run(
-            [
-                "/usr/bin/busctl",
-                "--address=unix:path=/run/dbus/system_bus_socket",
-                "call",
-                "org.freedesktop.systemd1",
-                "/org/freedesktop/systemd1",
-                "org.freedesktop.systemd1.Manager",
-                "StartUnit",
-                "ss",
-                "nattvakten-poweroff.service",
-                "replace",
-            ],
-            check=True,
-        )
+        self._request_path.touch()

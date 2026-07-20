@@ -8,7 +8,7 @@ services:
     ports:
       - "${NATTVAKTEN_PORT:-8765}:8765"
     volumes:
-      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
+      - /run/nattvakten:/run/nattvakten
     read_only: true
     tmpfs:
       - /tmp

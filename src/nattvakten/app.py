@@ -61,7 +61,9 @@ class MachineController:
         self.leases = LeaseManager(
             settings.min_lease_ttl_seconds, settings.max_lease_ttl_seconds
         )
-        self.power = power or PowerController(settings.poweroff_enabled)
+        self.power = power or PowerController(
+            settings.poweroff_enabled, settings.poweroff_request_path
+        )
         self.state: LifecycleState = "starting"
         self.shutdown_at: datetime | None = None
         self.maintenance_expires_at: datetime | None = None

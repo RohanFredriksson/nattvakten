@@ -53,7 +53,7 @@ Run focused tests in the same development container with:
 docker compose -f compose.dev.yaml run --rm nattvakten python -m pytest -q
 ```
 
-The development container mounts the source code read-only and does not receive the host D-Bus socket, so it cannot power off the host. `NATTVAKTEN_POWEROFF_ENABLED` should remain `false` in `.env`.
+The development container mounts the source code read-only and does not receive the host power-off request directory, so it cannot power off the host. `NATTVAKTEN_POWEROFF_ENABLED` should remain `false` in `.env`.
 
 Direct Python remains useful for editor debugging or a quick test run:
 
@@ -74,7 +74,7 @@ Deployment responsibilities are deliberately split:
 - Docker builds and runs the API, including Python and its dependencies.
 - Compose provides the API configuration and a read-only container with no Linux capabilities.
 - systemd starts and stops the Compose project at boot.
-- The container runs with the host `nattvakten` UID and can reach only the system D-Bus socket. Polkit permits that identity to start the fixed `nattvakten-poweroff.service`, not arbitrary root commands.
+- The container runs with the host `nattvakten` UID and can only write a single request file in `/run/nattvakten`. A host `systemd` path unit watches that file and starts the fixed, root-owned `nattvakten-poweroff.service`. The container cannot reach the host D-Bus, systemd, or Docker, and cannot run arbitrary commands as root.
 
 ### 1. Install Docker and host tools
 
@@ -96,7 +96,7 @@ sudo git clone https://github.com/RohanFredriksson/nattvakten.git /opt/nattvakte
 
 ### 3. Create the service account and configuration
 
-Generate a token on the server. Save it somewhere secure; clients need this exact value in their `Authorization: Bearer` header. The UID and GID make the API container appear as the restricted `nattvakten` account to the host D-Bus and polkit.
+Generate a token on the server. Save it somewhere secure; clients need this exact value in their `Authorization: Bearer` header. The UID and GID make the API container appear as the restricted `nattvakten` account that owns the host power-off request directory.
 
 ```bash
 TOKEN=$(openssl rand -hex 32)
@@ -124,17 +124,20 @@ Keep power-off disabled until the API and WOL path work correctly.
 
 ### 4. Install and start the container service
 
-The systemd unit builds and starts the container. When power-off is enabled, the API container uses the host D-Bus to start only the fixed, root-owned `nattvakten-poweroff.service`; it cannot run arbitrary commands as root.
+The systemd unit builds and starts the container. When power-off is enabled, the API container writes a single request file into `/run/nattvakten`; a host path unit watches that file and starts the fixed, root-owned `nattvakten-poweroff.service`. The container cannot run arbitrary commands as root.
 
 ```bash
+sudo install -m 644 /opt/nattvakten/deploy/nattvakten-tmpfiles.conf /etc/tmpfiles.d/nattvakten.conf
+sudo systemd-tmpfiles --create /etc/tmpfiles.d/nattvakten.conf
 sudo install -m 644 /opt/nattvakten/deploy/nattvakten.service /etc/systemd/system/nattvakten.service
 sudo install -m 644 /opt/nattvakten/deploy/nattvakten-poweroff.service /etc/systemd/system/nattvakten-poweroff.service
-sudo install -m 644 /opt/nattvakten/deploy/49-nattvakten-poweroff.rules /etc/polkit-1/rules.d/49-nattvakten-poweroff.rules
+sudo install -m 644 /opt/nattvakten/deploy/nattvakten-poweroff.path /etc/systemd/system/nattvakten-poweroff.path
 sudo systemctl daemon-reload
+sudo systemctl enable --now nattvakten-poweroff.path
 sudo systemctl enable --now nattvakten.service
 ```
 
-Do not replace the polkit rule with a broad passwordless `sudo` rule or mount the Docker socket in the container. The D-Bus mount is necessary for the fixed power-off request; polkit limits it to that one systemd unit.
+Do not replace the path unit with a broad passwordless `sudo` rule or mount the Docker socket or host D-Bus in the container. The container's only host privilege is creating the request file, which can trigger nothing but the fixed power-off unit.
 
 ### 5. Verify the API before enabling power-off
 
@@ -154,10 +157,10 @@ The status response should report a `boot_id`, `ready` state, and an active leas
 
 ### 6. Enable and test real power-off
 
-First validate the root helper from the service account. This powers the host off immediately, so run it only when it is safe to do so:
+First validate the host power-off path by writing the request file as the service account. This powers the host off immediately, so run it only when it is safe to do so:
 
 ```bash
-sudo -u nattvakten /usr/bin/systemctl start nattvakten-poweroff.service
+sudo -u nattvakten touch /run/nattvakten/poweroff.request
 ```
 
 After waking the machine and confirming it boots normally, enable controller-initiated power-off:

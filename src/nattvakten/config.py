@@ -10,6 +10,7 @@ class Settings:
     max_lease_ttl_seconds: int = 900
     shutdown_grace_seconds: int = 60
     poweroff_enabled: bool = False
+    poweroff_request_path: str = "/run/nattvakten/poweroff.request"
 
     @classmethod
     def from_environment(cls) -> "Settings":
@@ -31,4 +32,7 @@ class Settings:
                 "NATTVAKTEN_POWEROFF_ENABLED", "false"
             ).lower()
             in {"1", "true", "yes"},
+            poweroff_request_path=os.environ.get(
+                "NATTVAKTEN_POWEROFF_REQUEST_PATH", "/run/nattvakten/poweroff.request"
+            ),
         )

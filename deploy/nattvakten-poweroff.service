@@ -3,4 +3,5 @@ Description=Power off the machine at Nattvakten's request
 
 [Service]
 Type=oneshot
+ExecStartPre=/bin/rm -f /run/nattvakten/poweroff.request
 ExecStart=/usr/bin/systemctl poweroff

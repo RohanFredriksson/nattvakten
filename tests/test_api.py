@@ -1,5 +1,4 @@
 import asyncio
-import subprocess
 
 from fastapi.testclient import TestClient
 
@@ -95,35 +94,20 @@ class RecordingPowerController:
         self.calls += 1
 
 
-def test_power_off_starts_the_helper_through_the_host_system_bus(
-    monkeypatch,
-) -> None:
-    calls: list[tuple[list[str], bool]] = []
+def test_power_off_writes_a_request_file(tmp_path) -> None:
+    request_path = tmp_path / "poweroff.request"
 
-    def record_run(command: list[str], check: bool) -> None:
-        calls.append((command, check))
+    PowerController(enabled=True, request_path=str(request_path)).power_off()
 
-    monkeypatch.setattr(subprocess, "run", record_run)
+    assert request_path.exists()
 
-    PowerController(enabled=True).power_off()
 
-    assert calls == [
-        (
-            [
-                "/usr/bin/busctl",
-                "--address=unix:path=/run/dbus/system_bus_socket",
-                "call",
-                "org.freedesktop.systemd1",
-                "/org/freedesktop/systemd1",
-                "org.freedesktop.systemd1.Manager",
-                "StartUnit",
-                "ss",
-                "nattvakten-poweroff.service",
-                "replace",
-            ],
-            True,
-        )
-    ]
+def test_power_off_is_a_noop_when_disabled(tmp_path) -> None:
+    request_path = tmp_path / "poweroff.request"
+
+    PowerController(enabled=False, request_path=str(request_path)).power_off()
+
+    assert not request_path.exists()
 
 
 async def test_lease_cancels_pending_shutdown() -> None:
