@@ -14,13 +14,23 @@ from .power import PowerController
 
 
 LifecycleState = Literal[
-    "starting", "preparing", "ready", "shutdown_pending", "powering_off", "failed"
+    "starting",
+    "preparing",
+    "ready",
+    "maintenance",
+    "shutdown_pending",
+    "powering_off",
+    "failed",
 ]
 
 
 class CreateLeaseRequest(BaseModel):
     client_name: str = Field(min_length=1, max_length=100)
     ttl_seconds: int | None = None
+
+
+class EnableMaintenanceRequest(BaseModel):
+    ttl_seconds: int = Field(default=3600, ge=1, le=86400)
 
 
 class LeaseResponse(BaseModel):
@@ -34,7 +44,14 @@ class StatusResponse(BaseModel):
     state: LifecycleState
     active_lease_count: int
     shutdown_at: datetime | None
+    maintenance_active: bool
+    maintenance_expires_at: datetime | None
     readiness: dict[str, str]
+
+
+class MaintenanceResponse(BaseModel):
+    active: bool
+    expires_at: datetime | None
 
 
 class MachineController:
@@ -47,6 +64,7 @@ class MachineController:
         self.power = power or PowerController(settings.poweroff_enabled)
         self.state: LifecycleState = "starting"
         self.shutdown_at: datetime | None = None
+        self.maintenance_expires_at: datetime | None = None
         self._monitor_task: asyncio.Task[None] | None = None
 
     async def start(self) -> None:
@@ -76,18 +94,42 @@ class MachineController:
             self._cancel_shutdown()
         return lease
 
+    def enable_maintenance(self, ttl_seconds: int) -> MaintenanceResponse:
+        self.maintenance_expires_at = datetime.now(UTC) + timedelta(seconds=ttl_seconds)
+        self._cancel_shutdown()
+        self.state = "maintenance"
+        return self.maintenance_status()
+
+    def disable_maintenance(self) -> None:
+        self.maintenance_expires_at = None
+        if self.state == "maintenance":
+            self.state = "ready"
+
+    def maintenance_status(self) -> MaintenanceResponse:
+        return MaintenanceResponse(
+            active=self._maintenance_active(),
+            expires_at=self.maintenance_expires_at,
+        )
+
     def status(self) -> StatusResponse:
         active_leases = self.leases.active()
+        maintenance = self.maintenance_status()
         return StatusResponse(
             boot_id=self.boot_id,
             state=self.state,
             active_lease_count=len(active_leases),
             shutdown_at=self.shutdown_at,
+            maintenance_active=maintenance.active,
+            maintenance_expires_at=maintenance.expires_at,
             readiness={"controller": "ready" if self.state == "ready" else self.state},
         )
 
     async def _monitor_leases(self) -> None:
         while True:
+            if self._maintenance_active():
+                self._cancel_shutdown()
+            elif self.state == "maintenance":
+                self.state = "ready"
             active_leases = self.leases.active()
             if active_leases:
                 self._cancel_shutdown()
@@ -110,6 +152,16 @@ class MachineController:
         if self.state == "shutdown_pending":
             self.state = "ready"
         self.shutdown_at = None
+
+    def _maintenance_active(self) -> bool:
+        if self.maintenance_expires_at is None:
+            return False
+        if datetime.now(UTC) < self.maintenance_expires_at:
+            return True
+        self.maintenance_expires_at = None
+        if self.state == "maintenance":
+            self.state = "ready"
+        return False
 
 
 def _to_response(lease: Lease) -> LeaseResponse:
@@ -149,6 +201,22 @@ def create_app(
     @app.get("/v1/status", response_model=StatusResponse, dependencies=[Depends(require_token)])
     def get_status() -> StatusResponse:
         return controller.status()
+
+    @app.put(
+        "/v1/maintenance",
+        response_model=MaintenanceResponse,
+        dependencies=[Depends(require_token)],
+    )
+    def enable_maintenance(request: EnableMaintenanceRequest) -> MaintenanceResponse:
+        return controller.enable_maintenance(request.ttl_seconds)
+
+    @app.delete(
+        "/v1/maintenance",
+        status_code=status.HTTP_204_NO_CONTENT,
+        dependencies=[Depends(require_token)],
+    )
+    def disable_maintenance() -> None:
+        controller.disable_maintenance()
 
     @app.post(
         "/v1/leases",
