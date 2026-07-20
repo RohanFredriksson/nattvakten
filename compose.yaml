@@ -1,0 +1,19 @@
+services:
+  nattvakten:
+    build: .
+    container_name: nattvakten
+    env_file:
+      - ${NATTVAKTEN_ENV_FILE:-/etc/nattvakten/nattvakten.env}
+    user: "${NATTVAKTEN_UID}:${NATTVAKTEN_GID}"
+    ports:
+      - "8000:8000"
+    volumes:
+      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped

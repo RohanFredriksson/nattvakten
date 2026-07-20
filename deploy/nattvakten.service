@@ -1,0 +1,16 @@
+[Unit]
+Description=Nattvakten lease API container
+Wants=network-online.target
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/nattvakten
+ExecStart=/usr/bin/docker compose --env-file /etc/nattvakten/nattvakten.env -f /opt/nattvakten/compose.yaml up --build --detach
+ExecStop=/usr/bin/docker compose --env-file /etc/nattvakten/nattvakten.env -f /opt/nattvakten/compose.yaml down
+
+[Install]
+WantedBy=multi-user.target
+
