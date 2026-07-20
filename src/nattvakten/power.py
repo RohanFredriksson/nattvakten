@@ -9,6 +9,17 @@ class PowerController:
         if not self._enabled:
             return
         subprocess.run(
-            ["/usr/bin/systemctl", "start", "nattvakten-poweroff.service"],
+            [
+                "/usr/bin/busctl",
+                "--address=unix:path=/run/dbus/system_bus_socket",
+                "call",
+                "org.freedesktop.systemd1",
+                "/org/freedesktop/systemd1",
+                "org.freedesktop.systemd1.Manager",
+                "StartUnit",
+                "ss",
+                "nattvakten-poweroff.service",
+                "replace",
+            ],
             check=True,
         )

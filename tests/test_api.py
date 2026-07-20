@@ -1,9 +1,11 @@
 import asyncio
+import subprocess
 
 from fastapi.testclient import TestClient
 
 from nattvakten.app import CreateLeaseRequest, MachineController, create_app
 from nattvakten.config import Settings
+from nattvakten.power import PowerController
 
 
 def make_client() -> TestClient:
@@ -91,6 +93,37 @@ class RecordingPowerController:
 
     def power_off(self) -> None:
         self.calls += 1
+
+
+def test_power_off_starts_the_helper_through_the_host_system_bus(
+    monkeypatch,
+) -> None:
+    calls: list[tuple[list[str], bool]] = []
+
+    def record_run(command: list[str], check: bool) -> None:
+        calls.append((command, check))
+
+    monkeypatch.setattr(subprocess, "run", record_run)
+
+    PowerController(enabled=True).power_off()
+
+    assert calls == [
+        (
+            [
+                "/usr/bin/busctl",
+                "--address=unix:path=/run/dbus/system_bus_socket",
+                "call",
+                "org.freedesktop.systemd1",
+                "/org/freedesktop/systemd1",
+                "org.freedesktop.systemd1.Manager",
+                "StartUnit",
+                "ss",
+                "nattvakten-poweroff.service",
+                "replace",
+            ],
+            True,
+        )
+    ]
 
 
 async def test_lease_cancels_pending_shutdown() -> None:
