@@ -17,6 +17,21 @@ Nattvakten is a FastAPI daemon for a Wake-on-LAN Ubuntu host. Each boot is a new
 
 Lease TTLs are bounded by configuration. Maintenance mode cancels a pending shutdown and prevents automatic power-off until it expires or is disabled. Leases and maintenance state live only in memory, so a full power cycle intentionally clears them.
 
+## Maintenance mode
+
+Enable maintenance mode before work that must keep the host on. It immediately cancels a pending shutdown, expires after one hour by default, and can last up to 24 hours:
+
+```bash
+curl -X PUT -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{"ttl_seconds":3600}' http://127.0.0.1:8765/v1/maintenance
+```
+
+Check the `maintenance_active` and `maintenance_expires_at` fields in `GET /v1/status`. When maintenance is complete, return to normal shutdown behavior:
+
+```bash
+curl -X DELETE -H "Authorization: Bearer <token>" http://127.0.0.1:8765/v1/maintenance
+```
+
 ## Local development
 
 Docker is the default local workflow. Configure a local token, then start the API with live reload:
@@ -136,21 +151,6 @@ sudo docker compose --env-file /etc/nattvakten/nattvakten.env -f /opt/nattvakten
 ```
 
 The status response should report a `boot_id`, `ready` state, and an active lease count of `1`. Delete the lease using its returned ID, then wait through the grace period. Because power-off remains disabled, the status changes to `powering_off` but the machine stays on.
-
-### Maintenance mode
-
-Enable maintenance mode before work that must keep the host on. It immediately cancels a pending shutdown, expires after one hour by default, and can last up to 24 hours:
-
-```bash
-curl -X PUT -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"ttl_seconds":3600}' http://127.0.0.1:8765/v1/maintenance
-```
-
-Check the `maintenance_active` and `maintenance_expires_at` fields in `GET /v1/status`. When maintenance is complete, return to normal shutdown behavior:
-
-```bash
-curl -X DELETE -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8765/v1/maintenance
-```
 
 ### 6. Enable and test real power-off
 
