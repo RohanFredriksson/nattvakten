@@ -86,7 +86,21 @@ sudo apt install --yes docker.io docker-compose-v2 ethtool curl
 sudo systemctl enable --now docker.service
 ```
 
-### 2. Copy the application
+### 2. Enable persistent Wake-on-LAN
+
+In firmware, enable Wake-on-LAN and disable settings that remove standby power from the network adapter, such as ErP, deep sleep, or S5 maximum power savings. Then enable magic-packet wake on the physical Ethernet interface. Replace `eno1` if the server uses a different interface:
+
+```bash
+sudo ethtool eno1 | grep -i wake
+sudo install -m 644 /opt/nattvakten/deploy/nattvakten-wol@.service /etc/systemd/system/nattvakten-wol@.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now nattvakten-wol@eno1.service
+sudo ethtool eno1 | grep -i wake
+```
+
+The final command must report `Wake-on: g`. The service reapplies that setting after every boot, before the host later shuts down.
+
+### 3. Copy the application
 
 Clone the repository on the server. No host Python environment or package installation is needed.
 
@@ -94,7 +108,7 @@ Clone the repository on the server. No host Python environment or package instal
 sudo git clone https://github.com/RohanFredriksson/nattvakten.git /opt/nattvakten
 ```
 
-### 3. Create the service account and configuration
+### 4. Create the service account and configuration
 
 Generate a token on the server. Save it somewhere secure; clients need this exact value in their `Authorization: Bearer` header. The UID and GID make the API container appear as the restricted `nattvakten` account that owns the host power-off request directory.
 
@@ -122,7 +136,7 @@ sudo chmod 640 /etc/nattvakten/nattvakten.env
 
 Keep power-off disabled until the API and WOL path work correctly.
 
-### 4. Install and start the container service
+### 5. Install and start the container service
 
 The systemd unit builds and starts the container. When power-off is enabled, the API container writes a single request file into `/run/nattvakten`; a host path unit watches that file and starts the fixed, root-owned `nattvakten-poweroff.service`. The container cannot run arbitrary commands as root.
 
@@ -139,7 +153,7 @@ sudo systemctl enable --now nattvakten.service
 
 Do not replace the path unit with a broad passwordless `sudo` rule or mount the Docker socket or host D-Bus in the container. The container's only host privilege is creating the request file, which can trigger nothing but the fixed power-off unit.
 
-### 5. Verify the API before enabling power-off
+### 6. Verify the API before enabling power-off
 
 Run on the server:
 
@@ -155,7 +169,7 @@ sudo docker compose --env-file /etc/nattvakten/nattvakten.env -f /opt/nattvakten
 
 The status response should report a `boot_id`, `ready` state, and an active lease count of `1`. Delete the lease using its returned ID, then wait through the grace period. Because power-off remains disabled, the status changes to `powering_off` but the machine stays on.
 
-### 6. Enable and test real power-off
+### 7. Enable and test real power-off
 
 First validate the host power-off path by writing the request file as the service account. This powers the host off immediately, so run it only when it is safe to do so:
 
