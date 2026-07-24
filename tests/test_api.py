@@ -65,27 +65,6 @@ def test_lease_ttl_is_bounded() -> None:
     assert "ttl_seconds must be between 30 and 120" in response.json()["detail"]
 
 
-def test_maintenance_requires_authentication_and_cancels_shutdown() -> None:
-    headers = {"Authorization": "Bearer test-token"}
-    with make_client() as client:
-        controller = client.app.state.controller
-        controller.state = "shutdown_pending"
-        controller.shutdown_at = None
-
-        unauthorized = client.put("/v1/maintenance")
-        enabled = client.put("/v1/maintenance", headers=headers, json={"ttl_seconds": 60})
-        status_response = client.get("/v1/status", headers=headers)
-        disabled = client.delete("/v1/maintenance", headers=headers)
-
-    assert unauthorized.status_code == 401
-    assert enabled.status_code == 200
-    assert enabled.json()["active"] is True
-    assert status_response.json()["state"] == "maintenance"
-    assert status_response.json()["maintenance_active"] is True
-    assert status_response.json()["shutdown_at"] is None
-    assert disabled.status_code == 204
-
-
 class RecordingPowerController:
     def __init__(self) -> None:
         self.calls = 0

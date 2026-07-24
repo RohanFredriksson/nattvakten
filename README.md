@@ -12,25 +12,8 @@ Nattvakten is a FastAPI daemon for a Wake-on-LAN Ubuntu host. Each boot is a new
 | `POST /v1/leases` | Acquire a lease with `client_name` and optional `ttl_seconds` |
 | `PUT /v1/leases/{id}` | Renew an existing lease using `ttl_seconds` |
 | `DELETE /v1/leases/{id}` | Release a lease early |
-| `PUT /v1/maintenance` | Enable maintenance mode for up to 24 hours; defaults to one hour |
-| `DELETE /v1/maintenance` | Disable maintenance mode and resume normal shutdown behavior |
 
-Lease TTLs are bounded by configuration. Maintenance mode cancels a pending shutdown and prevents automatic power-off until it expires or is disabled. Leases and maintenance state live only in memory, so a full power cycle intentionally clears them.
-
-## Maintenance mode
-
-Enable maintenance mode before work that must keep the host on. It immediately cancels a pending shutdown, expires after one hour by default, and can last up to 24 hours:
-
-```bash
-curl -X PUT -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
-  -d '{"ttl_seconds":3600}' http://127.0.0.1:8765/v1/maintenance
-```
-
-Check the `maintenance_active` and `maintenance_expires_at` fields in `GET /v1/status`. When maintenance is complete, return to normal shutdown behavior:
-
-```bash
-curl -X DELETE -H "Authorization: Bearer <token>" http://127.0.0.1:8765/v1/maintenance
-```
+Lease TTLs are bounded by configuration. Leases live only in memory, so a full power cycle intentionally clears them.
 
 ## Local development
 
